@@ -65,6 +65,9 @@ console.log(results);
 ### 3. CLI Usage
 
 ```bash
+npm install
+npm run build
+
 # Index a directory
 npx codebase-indexer index ./src --collection my_codebase
 

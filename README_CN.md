@@ -66,6 +66,9 @@ console.log(results);
 ### 3. 命令行用法
 
 ```bash
+npm install
+npm run build
+
 # 索引目录
 npx codebase-indexer index ./src --collection my_codebase
 
