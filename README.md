@@ -1,6 +1,10 @@
 # Codebase Indexer
 
+[中文版 README](./README_CN.md) | English
+
 A powerful TypeScript library for indexing and searching code repositories using vector embeddings. Built with Qdrant vector database and OpenAI embeddings.
+
+> **Note**: This project is extracted and refactored from the codebase-indexer component of [Roo-Code](https://github.com/RooCodeInc/Roo-Code) for learning purposes.
 
 ## Features
 

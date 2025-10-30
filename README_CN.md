@@ -1,6 +1,10 @@
 # 代码库索引器
 
+中文版 | [English README](./README.md)
+
 一个强大的 TypeScript 库，用于使用向量嵌入对代码仓库进行索引和搜索。基于 Qdrant 向量数据库和 OpenAI 嵌入构建。
+
+> **说明**：本项目是从 [Roo-Code](https://github.com/RooCodeInc/Roo-Code) 项目中的 codebase-indexer 组件抽取出来并改造，用于学习目的。
 
 ## 特性
 
