@@ -1,175 +1,74 @@
-import { Anthropic } from "@anthropic-ai/sdk"
+#!/usr/bin/env node
 
-import type { ProviderSettings, ModelInfo } from "@roo-code/types"
+// Load environment variables from .env file
+import * as dotenv from 'dotenv';
+dotenv.config();
 
-import { ApiStream } from "./transform/stream"
+import { Command } from 'commander';
+import * as path from 'path';
+import { CodebaseIndexerServer } from './server';
+import { CodeIndexConfig } from '../types';
 
-import {
-	GlamaHandler,
-	AnthropicHandler,
-	AwsBedrockHandler,
-	CerebrasHandler,
-	OpenRouterHandler,
-	VertexHandler,
-	AnthropicVertexHandler,
-	OpenAiHandler,
-	LmStudioHandler,
-	GeminiHandler,
-	OpenAiNativeHandler,
-	DeepSeekHandler,
-	MoonshotHandler,
-	MistralHandler,
-	VsCodeLmHandler,
-	UnboundHandler,
-	RequestyHandler,
-	HumanRelayHandler,
-	FakeAIHandler,
-	XAIHandler,
-	GroqHandler,
-	HuggingFaceHandler,
-	ChutesHandler,
-	LiteLLMHandler,
-	ClaudeCodeHandler,
-	QwenCodeHandler,
-	SambaNovaHandler,
-	IOIntelligenceHandler,
-	DoubaoHandler,
-	ZAiHandler,
-	FireworksHandler,
-	RooHandler,
-	FeatherlessHandler,
-	VercelAiGatewayHandler,
-	DeepInfraHandler,
-	MiniMaxHandler,
-} from "./providers"
-import { NativeOllamaHandler } from "./providers/native-ollama"
+const program = new Command();
 
-export interface SingleCompletionHandler {
-	completePrompt(prompt: string): Promise<string>
-}
+program
+  .name('codebase-indexer-server')
+  .description('Start the Codebase Indexer API server')
+  .version('1.0.0')
+  .option('-p, --port <port>', 'Port to run the server on', '3000')
+  .option('-c, --config <path>', 'Configuration file path')
+  .option('--openai-key <key>', 'OpenAI API key')
+  .option('--openai-base-url <url>', 'OpenAI API base URL')
+  .option('--qdrant-url <url>', 'Qdrant server URL', 'http://localhost:6333')
+  .option('--collection <name>', 'Collection name', 'codebase_index')
+  .action(async (options: any) => {
+    try {
+      const port = parseInt(options.port);
+      
+      // Build configuration
+      const config: Partial<CodeIndexConfig> = {
+        vectorStore: {
+          type: 'qdrant',
+          url: options.qdrantUrl,
+          collectionName: options.collection
+        },
+        embedder: {
+          type: 'openai',
+          apiKey: options.openaiKey || process.env.OPENAI_API_KEY || '',
+          model: 'text-embedding-ada-002',
+          baseURL: options.openaiBaseUrl || process.env.OPENAI_BASE_URL
+        }
+      };
 
-export interface ApiHandlerCreateMessageMetadata {
-	mode?: string
-	taskId: string
-	previousResponseId?: string
-	/**
-	 * When true, the provider must NOT fall back to internal continuity state
-	 * (e.g., lastResponseId) if previousResponseId is absent.
-	 * Used to enforce "skip once" after a condense operation.
-	 */
-	suppressPreviousResponseId?: boolean
-	/**
-	 * Controls whether the response should be stored for 30 days in OpenAI's Responses API.
-	 * When true (default), responses are stored and can be referenced in future requests
-	 * using the previous_response_id for efficient conversation continuity.
-	 * Set to false to opt out of response storage for privacy or compliance reasons.
-	 * @default true
-	 */
-	store?: boolean
-}
+      // Load config file if provided
+      if (options.config) {
+        const configFile = await import(path.resolve(options.config));
+        Object.assign(config, configFile.default || configFile);
+      }
 
-export interface ApiHandler {
-	createMessage(
-		systemPrompt: string,
-		messages: Anthropic.Messages.MessageParam[],
-		metadata?: ApiHandlerCreateMessageMetadata,
-	): ApiStream
+      const server = new CodebaseIndexerServer(config, port);
+      
+      // Handle graceful shutdown
+      process.on('SIGINT', async () => {
+        console.log('\n🛑 Shutting down server...');
+        await server.stop();
+        process.exit(0);
+      });
 
-	getModel(): { id: string; info: ModelInfo }
+      process.on('SIGTERM', async () => {
+        console.log('\n🛑 Shutting down server...');
+        await server.stop();
+        process.exit(0);
+      });
 
-	/**
-	 * Counts tokens for content blocks
-	 * All providers extend BaseProvider which provides a default tiktoken implementation,
-	 * but they can override this to use their native token counting endpoints
-	 *
-	 * @param content The content to count tokens for
-	 * @returns A promise resolving to the token count
-	 */
-	countTokens(content: Array<Anthropic.Messages.ContentBlockParam>): Promise<number>
-}
+      await server.start();
+      console.log(`🚀 Server running on port ${port}`);
+    } catch (error) {
+      console.error('❌ Failed to start server:', error);
+      process.exit(1);
+    }
+  });
 
-export function buildApiHandler(configuration: ProviderSettings): ApiHandler {
-	const { apiProvider, ...options } = configuration
+program.parse();
 
-	switch (apiProvider) {
-		case "anthropic":
-			return new AnthropicHandler(options)
-		case "claude-code":
-			return new ClaudeCodeHandler(options)
-		case "glama":
-			return new GlamaHandler(options)
-		case "openrouter":
-			return new OpenRouterHandler(options)
-		case "bedrock":
-			return new AwsBedrockHandler(options)
-		case "vertex":
-			return options.apiModelId?.startsWith("claude")
-				? new AnthropicVertexHandler(options)
-				: new VertexHandler(options)
-		case "openai":
-			return new OpenAiHandler(options)
-		case "ollama":
-			return new NativeOllamaHandler(options)
-		case "lmstudio":
-			return new LmStudioHandler(options)
-		case "gemini":
-			return new GeminiHandler(options)
-		case "openai-native":
-			return new OpenAiNativeHandler(options)
-		case "deepseek":
-			return new DeepSeekHandler(options)
-		case "doubao":
-			return new DoubaoHandler(options)
-		case "qwen-code":
-			return new QwenCodeHandler(options)
-		case "moonshot":
-			return new MoonshotHandler(options)
-		case "vscode-lm":
-			return new VsCodeLmHandler(options)
-		case "mistral":
-			return new MistralHandler(options)
-		case "unbound":
-			return new UnboundHandler(options)
-		case "requesty":
-			return new RequestyHandler(options)
-		case "human-relay":
-			return new HumanRelayHandler()
-		case "fake-ai":
-			return new FakeAIHandler(options)
-		case "xai":
-			return new XAIHandler(options)
-		case "groq":
-			return new GroqHandler(options)
-		case "deepinfra":
-			return new DeepInfraHandler(options)
-		case "huggingface":
-			return new HuggingFaceHandler(options)
-		case "chutes":
-			return new ChutesHandler(options)
-		case "litellm":
-			return new LiteLLMHandler(options)
-		case "cerebras":
-			return new CerebrasHandler(options)
-		case "sambanova":
-			return new SambaNovaHandler(options)
-		case "zai":
-			return new ZAiHandler(options)
-		case "fireworks":
-			return new FireworksHandler(options)
-		case "io-intelligence":
-			return new IOIntelligenceHandler(options)
-		case "roo":
-			// Never throw exceptions from provider constructors
-			// The provider-proxy server will handle authentication and return appropriate error codes
-			return new RooHandler(options)
-		case "featherless":
-			return new FeatherlessHandler(options)
-		case "vercel-ai-gateway":
-			return new VercelAiGatewayHandler(options)
-		case "minimax":
-			return new MiniMaxHandler(options)
-		default:
-			apiProvider satisfies "gemini-cli" | undefined
-			return new AnthropicHandler(options)
-	}
-}
+export { CodebaseIndexerServer };
